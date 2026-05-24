@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-      "dev": "ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/server.ts",
-      "build": "prisma generate && tsc",
-      "start": "node dist/src/server.js",
-      "seed": "tsx prisma/seed.ts",
-      "test": "echo \"No tests specified\""
+    "dev": "ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/server.ts",
+    "build": "prisma generate && tsc",
+    "start": "node dist/src/server.js",
+    "seed": "tsx prisma/seed.ts",
+    "test": "echo \"No tests specified\""
   },
   "keywords": [],
   "author": "",
@@ -21,7 +21,8 @@
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.21.0",
     "prisma": "^7.8.0",
-    "tsconfig-paths": "^4.2.0"
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^6.0.3"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
