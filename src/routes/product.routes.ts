@@ -1,9 +1,9 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import prisma from '@/lib/prisma';
 
 const router = Router();
 
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response) => {
   const products = await prisma.product.findMany({
     where: {
       isVisible: true,
@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
   });
 });
 
-router.get('/category/:category', async (req, res) => {
+router.get('/category/:category', async (req: Request<{ category: string }>, res: Response) => {
   const { category } = req.params;
 
   const products = await prisma.product.findMany({
@@ -32,7 +32,7 @@ router.get('/category/:category', async (req, res) => {
   });
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req: Request<{ id: string }>, res: Response) => {
   const productId = Number(req.params.id);
 
   const product = await prisma.product.findUnique({
@@ -54,7 +54,7 @@ router.get('/:id', async (req, res) => {
   });
 });
 
-router.post('/', async (req, res) => {
+router.post('/', async (req: Request, res: Response) => {
   const product = await prisma.product.create({
     data: req.body,
   });
