@@ -2,14 +2,13 @@
   "name": "rubyshong_backend",
   "version": "1.0.0",
   "main": "index.js",
-  "scripts": {
-      "dev": "ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/server.ts",
-      "build": "node ./node_modules/prisma/build/index.js generate && tsc",
-      "start": "node ./node_modules/prisma/build/index.js generate && node -r tsconfig-paths/register dist/src/server.js",
-      "postinstall": "node ./node_modules/prisma/build/index.js generate",
-      "seed": "tsx prisma/seed.ts",
-      "test": "echo \"No tests specified\""
-  },
+"scripts": {
+  "dev": "ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/server.ts",
+  "build": "node ./node_modules/prisma/build/index.js generate && tsc",
+  "start": "node ./node_modules/prisma/build/index.js generate && node -r tsconfig-paths/register dist/src/server.js",
+  "seed": "tsx prisma/seed.ts",
+  "test": "echo \"No tests specified\""
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
