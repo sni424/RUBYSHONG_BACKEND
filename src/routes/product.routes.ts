@@ -1,31 +1,45 @@
 import { Router } from 'express';
-import { products } from '../data/products';
+import prisma from '@/lib/prisma';
 
 const router = Router();
 
-router.get('/', (req, res) => {
-  const visibleProducts = products.filter((product) => product.isVisible);
+router.get('/', async (req, res) => {
+  const products = await prisma.product.findMany({
+    where: {
+      isVisible: true,
+    },
+  });
 
   res.json({
     success: true,
-    data: visibleProducts,
+    data: products,
   });
 });
 
-router.get('/category/:category', (req, res) => {
+router.get('/category/:category', async (req, res) => {
   const { category } = req.params;
 
-  const filteredProducts = products.filter((product) => product.category === category && product.isVisible);
+  const products = await prisma.product.findMany({
+    where: {
+      category,
+      isVisible: true,
+    },
+  });
 
   res.json({
     success: true,
-    data: filteredProducts,
+    data: products,
   });
 });
 
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   const productId = Number(req.params.id);
-  const product = products.find((item) => item.id === productId);
+
+  const product = await prisma.product.findUnique({
+    where: {
+      id: productId,
+    },
+  });
 
   if (!product) {
     return res.status(404).json({
@@ -35,6 +49,17 @@ router.get('/:id', (req, res) => {
   }
 
   res.json({
+    success: true,
+    data: product,
+  });
+});
+
+router.post('/', async (req, res) => {
+  const product = await prisma.product.create({
+    data: req.body,
+  });
+
+  res.status(201).json({
     success: true,
     data: product,
   });
