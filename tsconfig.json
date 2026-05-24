@@ -47,11 +47,7 @@
     "moduleDetection": "force",
 
     //path
-    "baseUrl": "./",
 
-    "paths": {
-      "@/*": ["src/*"]
-    },
     "rootDir": ".",
     "outDir": "./dist"
   },
