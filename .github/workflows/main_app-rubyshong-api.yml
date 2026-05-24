@@ -24,9 +24,6 @@ jobs:
           node-version: '22.x'
 
       - name: npm install, build, and test
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           npm install
           npm run build --if-present
@@ -54,9 +51,9 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_CCC8DFFB1AFB4CFFA97FB8CF48802219 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_EDFE7674D89E45F39F9802D595F44899 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_891C9F15185243A5A552C92EA2587947 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_E212D0C6383941F3BFFD384A26BC1BC8 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_747BD79AC8F14B45A959566C5A11A1FA }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_271AF9301F1445AFAE7A1B4CC0132FC3 }}
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
