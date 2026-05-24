@@ -43,9 +43,10 @@ jobs:
           name: node-app
           path: |
             .
-            !node_modules        # node_modules 제외
-            !node_modules.tar.gz # 압축 파일도 절대 포함 금지
-
+            !node_modules
+            !node_modules/**
+            !.git
+            !.github
 
   deploy:
     runs-on: ubuntu-latest
