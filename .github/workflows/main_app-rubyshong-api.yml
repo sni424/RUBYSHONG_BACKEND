@@ -41,7 +41,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: .
+          path: |
+            .
+            !node_modules        # node_modules 제외
+            !node_modules.tar.gz # 압축 파일도 절대 포함 금지
+
 
   deploy:
     runs-on: ubuntu-latest
