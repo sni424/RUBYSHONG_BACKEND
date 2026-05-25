@@ -1,4 +1,6 @@
 import { BlobServiceClient } from '@azure/storage-blob';
+import path from 'path';
+import crypto from 'crypto';
 
 const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
 const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME;
@@ -15,7 +17,9 @@ const blobServiceClient = BlobServiceClient.fromConnectionString(connectionStrin
 const containerClient = blobServiceClient.getContainerClient(containerName);
 
 export const uploadImageToAzure = async (file: Express.Multer.File) => {
-  const fileName = `${Date.now()}-${file.originalname}`;
+  const extension = path.extname(file.originalname).toLowerCase() || '.jpg';
+  const fileName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
+
   const blockBlobClient = containerClient.getBlockBlobClient(fileName);
 
   await blockBlobClient.uploadData(file.buffer, {
