@@ -14,19 +14,32 @@ model Product {
 
   category      String
 
+  // 원가
   price         Int
-  salePrice     Int?
 
+  // 최종 판매 가격
+  finalPrice    Int
+
+  // 할인율 (%)
+  discountRate  Int      @default(0)
+
+  // 짧은 설명
   summary       String
+
+  // 상세 설명
   description   String
 
+  // Azure Blob 이미지 URL
   thumbnailUrl  String
 
-  isNew         Boolean @default(false)
-  isBest        Boolean @default(false)
-  isVisible     Boolean @default(true)
+  isNew         Boolean  @default(false)
+  isBest        Boolean  @default(false)
+  isVisible     Boolean  @default(true)
 
-  stock         Int @default(0)
+  stock         Int      @default(0)
+
+  // 상품 상태: selling, soldout, hidden
+  status        String   @default("selling")
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
