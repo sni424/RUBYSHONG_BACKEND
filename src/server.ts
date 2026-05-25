@@ -9,11 +9,14 @@ const PORT = process.env.PORT || 4000;
 
 app.use(
   cors({
-    origin: ['http://localhost:5173'],
+    origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'https://rubyshong-project-for-mom.vercel.app'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   }),
 );
+
+app.options('*', cors());
+
 app.use(express.json());
 
 app.get('/', (req, res) => {
@@ -21,7 +24,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/products', productRoutes);
-app.use('/api/admin', adminRoutes); // listen 전으로 올려야 함
+app.use('/api/admin', adminRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
