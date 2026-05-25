@@ -56,17 +56,6 @@ router.get('/:id', async (req: Request<{ id: string }>, res: Response) => {
   });
 });
 
-router.post('/', async (req: Request, res: Response) => {
-  const product = await prisma.product.create({
-    data: req.body,
-  });
-
-  res.status(201).json({
-    success: true,
-    data: product,
-  });
-});
-
 // 상품 이미지 업로드 API
 router.post('/image', upload.single('image'), async (req: Request, res: Response) => {
   try {
@@ -92,7 +81,7 @@ router.post('/image', upload.single('image'), async (req: Request, res: Response
       },
     });
   } catch (error) {
-    console.error(error);
+    console.error('Azure 이미지 업로드 실패 상세:', error);
 
     return res.status(500).json({
       success: false,
