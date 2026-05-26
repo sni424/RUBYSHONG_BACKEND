@@ -91,62 +91,46 @@ router.post('/image', upload.single('image'), async (req: Request, res: Response
 });
 
 // 상품 등록 API
-router.post(
-  '/',
-  // image 라는 이름으로 파일 1개 받기
-  upload.single('image'),
+router.post('/', async (req: Request, res: Response) => {
+  try {
+    const { name, category, price, discountRate, finalPrice, stock, status, summary, description, thumbnailUrl } =
+      req.body;
 
-  async (req, res) => {
-    try {
-      // 업로드된 이미지 파일
-      const file = req.file;
-
-      // 파일 없으면 에러 처리
-      if (!file) {
-        return res.status(400).json({
-          message: '이미지를 업로드해주세요.',
-        });
-      }
-
-      // Azure Blob Storage 업로드
-      const imageUrl = await uploadImageToAzure(file);
-
-      // 프론트에서 전달한 데이터
-      const { name, category, price, discountRate, finalPrice, stock, status, description } = req.body;
-
-      // DB 저장
-      const product = await prisma.product.create({
-        data: {
-          name,
-          slug: `${Date.now()}-${name}`,
-          category,
-          price: Number(price),
-          finalPrice: Number(finalPrice),
-          discountRate: Number(discountRate),
-          stock: Number(stock),
-
-          summary: description.slice(0, 80),
-          description,
-
-          // Azure Blob 이미지 URL 저장
-          thumbnailUrl: imageUrl,
-
-          isVisible: true,
-        },
-      });
-
-      return res.status(201).json({
-        success: true,
-        data: product,
-      });
-    } catch (error) {
-      console.error(error);
-
-      return res.status(500).json({
-        message: '상품 등록 실패',
+    if (!thumbnailUrl) {
+      return res.status(400).json({
+        success: false,
+        message: '상품 이미지 URL이 없습니다.',
       });
     }
-  },
-);
+
+    const product = await prisma.product.create({
+      data: {
+        name,
+        slug: `${Date.now()}-${name}`,
+        category,
+        price: Number(price),
+        discountRate: Number(discountRate || 0),
+        finalPrice: finalPrice ? Number(finalPrice) : Number(price),
+        stock: Number(stock),
+        summary,
+        description,
+        thumbnailUrl,
+        isVisible: status !== 'hidden',
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: product,
+    });
+  } catch (error) {
+    console.error('상품 등록 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '상품 등록 실패',
+    });
+  }
+});
 
 export default router;
