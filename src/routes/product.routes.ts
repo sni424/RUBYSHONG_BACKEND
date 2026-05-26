@@ -137,7 +137,7 @@ router.post(
 
       return res.status(201).json({
         success: true,
-        product,
+        data: product,
       });
     } catch (error) {
       console.error(error);
