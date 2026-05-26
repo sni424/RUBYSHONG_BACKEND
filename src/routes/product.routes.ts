@@ -6,9 +6,37 @@ import { uploadImageToAzure } from '../lib/upload';
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
+  const { category, search } = req.query;
+
   const products = await prisma.product.findMany({
     where: {
       isVisible: true,
+      ...(category
+        ? {
+            category: String(category),
+          }
+        : {}),
+      ...(search
+        ? {
+            OR: [
+              {
+                name: {
+                  contains: String(search),
+                  mode: 'insensitive',
+                },
+              },
+              {
+                slug: {
+                  contains: String(search),
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          }
+        : {}),
+    },
+    orderBy: {
+      createdAt: 'desc',
     },
   });
 
@@ -20,11 +48,33 @@ router.get('/', async (req: Request, res: Response) => {
 
 router.get('/category/:category', async (req: Request<{ category: string }>, res: Response) => {
   const { category } = req.params;
+  const { search } = req.query;
 
   const products = await prisma.product.findMany({
     where: {
       category,
       isVisible: true,
+      ...(search
+        ? {
+            OR: [
+              {
+                name: {
+                  contains: String(search),
+                  mode: 'insensitive',
+                },
+              },
+              {
+                slug: {
+                  contains: String(search),
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          }
+        : {}),
+    },
+    orderBy: {
+      createdAt: 'desc',
     },
   });
 
