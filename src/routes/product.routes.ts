@@ -106,6 +106,108 @@ router.get('/:id', async (req: Request<{ id: string }>, res: Response) => {
   });
 });
 
+// 상품 수정 API
+router.patch('/:id', async (req: Request<{ id: string }>, res: Response) => {
+  try {
+    // URL에서 상품 id 가져오기
+    const productId = Number(req.params.id);
+
+    // 프론트에서 수정할 상품 데이터 받기
+    const {
+      name,
+      category,
+      price,
+      finalPrice,
+      discountRate,
+      summary,
+      description,
+      thumbnailUrl,
+      stock,
+      status,
+      isNew,
+      isBest,
+      isVisible,
+    } = req.body;
+
+    // 상품 id가 숫자가 아니면 요청 거절
+    if (Number.isNaN(productId)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바르지 않은 상품 ID입니다.',
+      });
+    }
+
+    // 상품 수정
+    const product = await prisma.product.update({
+      where: {
+        id: productId,
+      },
+      data: {
+        name,
+        category,
+        price: Number(price),
+        finalPrice: Number(finalPrice),
+        discountRate: Number(discountRate || 0),
+        summary,
+        description,
+        thumbnailUrl,
+        stock: Number(stock),
+        status,
+        isNew: Boolean(isNew),
+        isBest: Boolean(isBest),
+        isVisible: Boolean(isVisible),
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: product,
+    });
+  } catch (error) {
+    console.error('상품 수정 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '상품 수정 실패',
+    });
+  }
+});
+
+// 상품 삭제 API
+router.delete('/:id', async (req: Request<{ id: string }>, res: Response) => {
+  try {
+    // URL에서 상품 id 가져오기
+    const productId = Number(req.params.id);
+
+    // 상품 id가 숫자가 아니면 요청 거절
+    if (Number.isNaN(productId)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바르지 않은 상품 ID입니다.',
+      });
+    }
+
+    // 상품 삭제
+    await prisma.product.delete({
+      where: {
+        id: productId,
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: '상품이 삭제되었습니다.',
+    });
+  } catch (error) {
+    console.error('상품 삭제 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '상품 삭제 실패',
+    });
+  }
+});
+
 // 상품 이미지 업로드 API
 router.post('/image', upload.single('image'), async (req: Request, res: Response) => {
   try {
