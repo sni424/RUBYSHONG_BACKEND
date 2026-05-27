@@ -53,3 +53,32 @@ model AdminUser {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model Reservation {
+  id        Int      @id @default(autoincrement())
+
+  // 고객 정보
+  name      String
+  phone     String
+
+  // 방문 날짜: YYYY-MM-DD
+  visitDate String
+
+  // 방문 시간: HH:mm
+  visitTime String
+
+  // 상담 내용
+  message   String?
+
+  // 예약 상태: pending, confirmed, cancelled, completed
+  status    String   @default("pending")
+
+  // 개인정보 동의 여부
+  privacyAgreed Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 같은 날짜와 같은 시간에는 하나의 예약만 허용
+  @@unique([visitDate, visitTime])
+}

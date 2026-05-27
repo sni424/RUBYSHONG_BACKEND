@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import productRoutes from './routes/product.routes';
 import adminRoutes from './routes/admin.routes';
+import reservationRoutes from './routes/reservation.routes';
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.get('/', (req, res) => {
 
 app.use('/api/products', productRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/reservations', reservationRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
