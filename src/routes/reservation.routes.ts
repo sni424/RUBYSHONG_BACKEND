@@ -168,4 +168,33 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
+// 관리자 예약 목록 조회 API
+router.get('/admin', async (req: Request, res: Response) => {
+  try {
+    // 예약 목록 최신순 조회
+    const reservations = await prisma.reservation.findMany({
+      orderBy: [
+        {
+          visitDate: 'desc',
+        },
+        {
+          visitTime: 'desc',
+        },
+      ],
+    });
+
+    return res.json({
+      success: true,
+      data: reservations,
+    });
+  } catch (error) {
+    console.error('관리자 예약 목록 조회 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '예약 목록 조회 실패',
+    });
+  }
+});
+
 export default router;
