@@ -42,13 +42,18 @@ jobs:
         with:
           name: node-app
       
-     
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_A7361F0D39274C85883AAF06CA9CCA1E }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_DF6E57819C27402994B055B0AD37152C }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_B8F376D4669C44DC8CE9E337662697BD }}
+
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'app-rubyshong-api'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: .
           
