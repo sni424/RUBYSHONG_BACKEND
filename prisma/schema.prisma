@@ -82,3 +82,23 @@ model Reservation {
   // 같은 날짜와 같은 시간에는 하나의 예약만 허용
   @@unique([visitDate, visitTime])
 }
+
+model ContactInquiry {
+  id        Int      @id @default(autoincrement())
+
+  // 고객 정보
+  name      String
+  phone     String
+
+  // 문의 제목
+  title     String
+
+  // 문의 내용
+  message   String
+
+  // 문의 상태: pending, answered, closed
+  status    String   @default("pending")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
