@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { upload } from '../middlewares/upload.middleware';
 import { uploadImageToAzure } from '../lib/upload';
+import { authAdmin } from '../middlewares/adminAuth.middleware';
+import { requireRole } from '../middlewares/role.middleware';
 
 const router = Router();
 
@@ -174,7 +176,7 @@ router.patch('/:id', async (req: Request<{ id: string }>, res: Response) => {
 });
 
 // 상품 삭제 API
-router.delete('/:id', async (req: Request<{ id: string }>, res: Response) => {
+router.delete('/:id', authAdmin, requireRole(['owner']), async (req: Request<{ id: string }>, res: Response) => {
   try {
     // URL에서 상품 id 가져오기
     const productId = Number(req.params.id);

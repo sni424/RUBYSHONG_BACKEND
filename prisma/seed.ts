@@ -13,15 +13,47 @@ const prisma = new PrismaClient({
   adapter,
 });
 
-async function main() {
-  const hashedPassword = await bcrypt.hash('1111', 10);
+// 추가할 관리자 계정 목록
+const adminUsers = [
+  {
+    email: 'admin@rubyshong.com',
+    password: '1111',
+    role: 'owner',
+  },
+  {
+    email: 'sni424@rubyshong.com',
+    password: '8107',
+    role: 'manager',
+  },
+  {
+    email: 'chu8107@rubyshong.com',
+    password: '1234',
+    role: 'staff',
+  },
+];
 
-  await prisma.adminUser.create({
-    data: {
-      email: 'admin@rubyshong.com',
-      password: hashedPassword,
-    },
-  });
+async function main() {
+  // 관리자 계정을 하나씩 추가 또는 업데이트
+  for (const adminUser of adminUsers) {
+    // 비밀번호 해시 생성
+    const hashedPassword = await bcrypt.hash(adminUser.password, 10);
+
+    // 이메일이 있으면 업데이트, 없으면 새로 생성
+    await prisma.adminUser.upsert({
+      where: {
+        email: adminUser.email,
+      },
+      update: {
+        password: hashedPassword,
+        role: adminUser.role,
+      },
+      create: {
+        email: adminUser.email,
+        password: hashedPassword,
+        role: adminUser.role,
+      },
+    });
+  }
 
   console.log('Seed completed');
 }
