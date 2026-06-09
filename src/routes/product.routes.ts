@@ -7,6 +7,39 @@ import { requireRole } from '../middlewares/role.middleware';
 
 const router = Router();
 
+// 상품 삭제 이력 조회 API
+router.get('/admin/delete-logs', authAdmin, async (req: Request, res: Response) => {
+  try {
+    // 최근 삭제순으로 상품 삭제 이력 조회
+    const deleteLogs = await prisma.productDeleteLog.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+      include: {
+        deletedBy: {
+          select: {
+            id: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: deleteLogs,
+    });
+  } catch (error) {
+    console.error('상품 삭제 이력 조회 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '상품 삭제 이력 조회 실패',
+    });
+  }
+});
+
 router.get('/', async (req: Request, res: Response) => {
   const { category, search } = req.query;
 
@@ -176,10 +209,14 @@ router.patch('/:id', async (req: Request<{ id: string }>, res: Response) => {
 });
 
 // 상품 삭제 API
+// 상품 삭제 API
 router.delete('/:id', authAdmin, requireRole(['owner']), async (req: Request<{ id: string }>, res: Response) => {
   try {
     // URL에서 상품 id 가져오기
     const productId = Number(req.params.id);
+
+    // 로그인한 관리자 정보 가져오기
+    const adminUser = req.adminUser;
 
     // 상품 id가 숫자가 아니면 요청 거절
     if (Number.isNaN(productId)) {
@@ -189,11 +226,44 @@ router.delete('/:id', authAdmin, requireRole(['owner']), async (req: Request<{ i
       });
     }
 
-    // 상품 삭제
-    await prisma.product.delete({
-      where: {
-        id: productId,
-      },
+    // 관리자 정보가 없으면 요청 거절
+    if (!adminUser) {
+      return res.status(401).json({
+        success: false,
+        message: '로그인이 필요합니다.',
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 삭제 전 상품 정보 조회
+      const product = await tx.product.findUnique({
+        where: {
+          id: productId,
+        },
+      });
+
+      // 상품이 없으면 삭제 불가
+      if (!product) {
+        throw new Error('PRODUCT_NOT_FOUND');
+      }
+
+      // 상품 삭제 이력 저장
+      await tx.productDeleteLog.create({
+        data: {
+          productId: product.id,
+          productName: product.name,
+          productSlug: product.slug,
+          deletedById: adminUser.id,
+          deletedData: JSON.parse(JSON.stringify(product)),
+        },
+      });
+
+      // 상품 실제 삭제
+      await tx.product.delete({
+        where: {
+          id: productId,
+        },
+      });
     });
 
     return res.json({
@@ -201,6 +271,13 @@ router.delete('/:id', authAdmin, requireRole(['owner']), async (req: Request<{ i
       message: '상품이 삭제되었습니다.',
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'PRODUCT_NOT_FOUND') {
+      return res.status(404).json({
+        success: false,
+        message: '상품을 찾을 수 없습니다.',
+      });
+    }
+
     console.error('상품 삭제 실패:', error);
 
     return res.status(500).json({

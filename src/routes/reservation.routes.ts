@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
+import { authAdmin } from '../middlewares/adminAuth.middleware';
+import { requireRole } from '../middlewares/role.middleware';
 
 const router = Router();
 
@@ -10,10 +12,13 @@ const RESERVATION_TIMES = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00',
 // 휴무 날짜 목록
 const CLOSED_DATES = [
   '2026-06-05',
-  //   '2026-09-24',
-  //   '2026-09-25',
-  //   '2026-09-26',
+  // '2026-09-24',
+  // '2026-09-25',
+  // '2026-09-26',
 ];
+
+// 예약 상태 목록
+const RESERVATION_STATUSES = ['pending', 'completed', 'cancelled'];
 
 // 날짜 문자열이 YYYY-MM-DD 형식인지 확인
 const isValidDateString = (date: string) => {
@@ -55,7 +60,6 @@ router.get('/available-times', async (req: Request, res: Response) => {
     const reservations = await prisma.reservation.findMany({
       where: {
         visitDate: date,
-        deletedAt: null,
         status: {
           not: 'cancelled',
         },
@@ -134,12 +138,12 @@ router.post('/', async (req: Request, res: Response) => {
         message: '개인정보 수집 및 이용에 동의해주세요.',
       });
     }
-    // 삭제되지 않았고 취소되지 않은 예약 중 같은 날짜/시간 예약이 있는지 확인
+
+    // 같은 날짜/시간 예약이 있는지 확인
     const existingReservation = await prisma.reservation.findFirst({
       where: {
         visitDate,
         visitTime,
-        deletedAt: null,
         status: {
           not: 'cancelled',
         },
@@ -188,19 +192,10 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // 관리자 예약 목록 조회 API
-router.get('/admin', async (req: Request, res: Response) => {
+router.get('/admin', authAdmin, async (req: Request, res: Response) => {
   try {
-    // includeDeleted=true이면 삭제 처리된 예약까지 조회
-    const includeDeleted = req.query.includeDeleted === 'true';
-    // 예약 목록 최신순 조회
-
     // 예약 목록 최신순 조회
     const reservations = await prisma.reservation.findMany({
-      where: includeDeleted
-        ? {}
-        : {
-            deletedAt: null,
-          },
       orderBy: [
         {
           visitDate: 'desc',
@@ -225,15 +220,6 @@ router.get('/admin', async (req: Request, res: Response) => {
             },
           },
         },
-
-        // 삭제한 관리자 정보도 함께 조회
-        deletedBy: {
-          select: {
-            id: true,
-            email: true,
-            role: true,
-          },
-        },
       },
     });
 
@@ -251,9 +237,42 @@ router.get('/admin', async (req: Request, res: Response) => {
   }
 });
 
+// 관리자 예약 삭제 이력 조회 API
+router.get('/admin/delete-logs', authAdmin, async (req: Request, res: Response) => {
+  try {
+    // 최근 삭제순으로 예약 삭제 이력 조회
+    const deleteLogs = await prisma.reservationDeleteLog.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+      include: {
+        deletedBy: {
+          select: {
+            id: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: deleteLogs,
+    });
+  } catch (error) {
+    console.error('예약 삭제 이력 조회 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '예약 삭제 이력 조회 실패',
+    });
+  }
+});
+
 // 관리자 예약 수정 API
 // owner, manager, staff 모두 수정 가능
-router.patch('/admin/:id', async (req: Request, res: Response) => {
+router.patch('/admin/:id', authAdmin, async (req: Request, res: Response) => {
   try {
     const adminUser = req.adminUser;
     const reservationId = Number(req.params.id);
@@ -275,17 +294,61 @@ router.patch('/admin/:id', async (req: Request, res: Response) => {
       });
     }
 
+    // 날짜 형식 검증
+    if (visitDate && !isValidDateString(visitDate)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바른 방문 날짜를 입력해주세요.',
+      });
+    }
+
+    // 예약 시간 검증
+    if (visitTime && !RESERVATION_TIMES.includes(visitTime)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바른 방문 시간을 선택해주세요.',
+      });
+    }
+
+    // 예약 상태 검증
+    if (status && !RESERVATION_STATUSES.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바른 예약 상태를 선택해주세요.',
+      });
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       // 수정 전 예약 데이터 조회
-      const before = await tx.reservation.findFirst({
+      const before = await tx.reservation.findUnique({
         where: {
           id: reservationId,
-          deletedAt: null,
         },
       });
 
       if (!before) {
         throw new Error('RESERVATION_NOT_FOUND');
+      }
+
+      const nextVisitDate = visitDate ?? before.visitDate;
+      const nextVisitTime = visitTime ?? before.visitTime;
+
+      // 날짜/시간이 바뀌는 경우 다른 예약과 중복되는지 확인
+      const duplicatedReservation = await tx.reservation.findFirst({
+        where: {
+          id: {
+            not: reservationId,
+          },
+          visitDate: nextVisitDate,
+          visitTime: nextVisitTime,
+          status: {
+            not: 'cancelled',
+          },
+        },
+      });
+
+      if (duplicatedReservation) {
+        throw new Error('DUPLICATED_RESERVATION_TIME');
       }
 
       // 예약 정보 수정
@@ -329,6 +392,13 @@ router.patch('/admin/:id', async (req: Request, res: Response) => {
       });
     }
 
+    if (error instanceof Error && error.message === 'DUPLICATED_RESERVATION_TIME') {
+      return res.status(409).json({
+        success: false,
+        message: '이미 예약된 시간입니다.',
+      });
+    }
+
     console.error('예약 수정 실패:', error);
 
     return res.status(500).json({
@@ -340,7 +410,7 @@ router.patch('/admin/:id', async (req: Request, res: Response) => {
 
 // 관리자 예약 삭제 API
 // owner만 삭제 가능
-router.delete('/admin/:id', async (req: Request, res: Response) => {
+router.delete('/admin/:id', authAdmin, requireRole(['owner']), async (req: Request, res: Response) => {
   try {
     const adminUser = req.adminUser;
     const reservationId = Number(req.params.id);
@@ -353,55 +423,58 @@ router.delete('/admin/:id', async (req: Request, res: Response) => {
       });
     }
 
-    // owner만 삭제 가능
-    if (adminUser.role !== 'owner') {
-      return res.status(403).json({
+    // 예약 ID 검증
+    if (!Number.isInteger(reservationId)) {
+      return res.status(400).json({
         success: false,
-        message: '예약 삭제는 최고 관리자만 가능합니다.',
+        message: '올바른 예약 ID를 입력해주세요.',
       });
     }
 
     await prisma.$transaction(async (tx) => {
       // 삭제 전 예약 데이터 조회
-      const before = await tx.reservation.findFirst({
+      const reservation = await tx.reservation.findUnique({
         where: {
           id: reservationId,
-          deletedAt: null,
         },
       });
 
-      if (!before) {
+      if (!reservation) {
         throw new Error('RESERVATION_NOT_FOUND');
       }
 
-      // 실제 삭제하지 않고 삭제 처리만 함
-      const after = await tx.reservation.update({
-        where: {
-          id: reservationId,
-        },
+      // 예약 삭제 이력 저장
+      await tx.reservationDeleteLog.create({
         data: {
-          deletedAt: new Date(),
+          reservationId: reservation.id,
+          visitDate: reservation.visitDate,
+          visitTime: reservation.visitTime,
+          status: reservation.status,
           deletedById: adminUser.id,
+          deletedData: JSON.parse(JSON.stringify(reservation)),
         },
       });
 
-      // 삭제 이력 저장
-      await tx.reservationHistory.create({
-        data: {
-          reservationId,
-          action: 'deleted',
-          changedById: adminUser.id,
-          beforeData: JSON.parse(JSON.stringify(before)),
-          afterData: JSON.parse(JSON.stringify(after)),
+      // 예약 실제 삭제
+      await tx.reservation.delete({
+        where: {
+          id: reservationId,
         },
       });
     });
 
     return res.json({
       success: true,
-      message: '예약이 삭제 처리되었습니다.',
+      message: '예약이 삭제되었습니다.',
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'RESERVATION_NOT_FOUND') {
+      return res.status(404).json({
+        success: false,
+        message: '예약을 찾을 수 없습니다.',
+      });
+    }
+
     console.error('예약 삭제 실패:', error);
 
     return res.status(500).json({

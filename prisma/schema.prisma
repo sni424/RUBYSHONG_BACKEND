@@ -7,7 +7,7 @@ datasource db {
 }
 
 // 관리자 계정 권한
-// owner: 전체 권한, 예약 삭제 가능
+// owner: 전체 권한, 예약/상품 삭제 가능
 // manager: 예약 변경 가능, 삭제 불가
 // staff: 예약 변경 가능, 삭제 불가
 enum UserRole {
@@ -29,12 +29,10 @@ enum ReservationStatus {
 // 예약 변경 이력 종류
 // created: 생성
 // updated: 예약 정보 수정
-// deleted: 삭제 처리
 // status_changed: 상태만 변경
 enum ReservationAction {
   created
   updated
-  deleted
   status_changed
 }
 
@@ -95,8 +93,37 @@ model AdminUser {
   // 이 관리자가 변경한 예약 이력 목록
   reservationHistories ReservationHistory[]
 
-  // 이 관리자가 삭제 처리한 예약 목록
-  deletedReservations Reservation[] @relation("ReservationDeletedBy")
+  // 이 관리자가 삭제한 예약 기록 목록
+  reservationDeleteLogs ReservationDeleteLog[]
+
+  // 이 관리자가 삭제한 상품 기록 목록
+  productDeleteLogs ProductDeleteLog[]
+}
+
+model ProductDeleteLog {
+  id Int @id @default(autoincrement())
+
+  // 삭제된 상품 ID
+  // Product는 실제 삭제되므로 relation을 걸지 않고 숫자만 보관
+  productId Int
+
+  // 삭제 당시 상품명
+  productName String
+
+  // 삭제 당시 상품 slug
+  productSlug String
+
+  // 삭제한 관리자 ID
+  deletedById Int
+
+  // 삭제한 관리자
+  deletedBy AdminUser @relation(fields: [deletedById], references: [id])
+
+  // 삭제 당시 상품 전체 데이터
+  deletedData Json
+
+  // 삭제된 시간
+  createdAt DateTime @default(now())
 }
 
 model Reservation {
@@ -121,26 +148,15 @@ model Reservation {
   // 개인정보 동의 여부
   privacyAgreed Boolean @default(false)
 
-  // 삭제 처리된 시간
-  // 실제 DB에서 삭제하지 않고 이 값으로 삭제 여부를 판단
-  deletedAt DateTime?
-
-  // 삭제한 관리자 ID
-  // owner 권한 계정만 삭제 가능하게 API에서 검사
-  deletedById Int?
-
-  // 삭제한 관리자 정보
-  deletedBy AdminUser? @relation("ReservationDeletedBy", fields: [deletedById], references: [id])
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // 이 예약의 변경 이력 목록
+  // 예약이 삭제되면 이력도 같이 삭제됨
   histories ReservationHistory[]
 
   // 같은 날짜와 같은 시간에는 하나의 예약만 허용
-  // 주의: deletedAt이 null이면 PostgreSQL에서는 중복 방지가 완벽하지 않을 수 있음
-  @@unique([visitDate, visitTime, deletedAt])
+  @@unique([visitDate, visitTime])
 }
 
 model ReservationHistory {
@@ -150,9 +166,10 @@ model ReservationHistory {
   reservationId Int
 
   // 변경된 예약
-  reservation Reservation @relation(fields: [reservationId], references: [id])
+  // 예약이 실제 삭제되면 변경 이력도 같이 삭제
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
 
-  // 변경 종류: created, updated, deleted, status_changed
+  // 변경 종류: created, updated, status_changed
   action ReservationAction
 
   // 변경한 관리자 ID
@@ -170,6 +187,36 @@ model ReservationHistory {
   afterData Json?
 
   // 변경이 발생한 시간
+  createdAt DateTime @default(now())
+}
+
+model ReservationDeleteLog {
+  id Int @id @default(autoincrement())
+
+  // 삭제된 예약 ID
+  // Reservation은 실제 삭제되므로 relation을 걸지 않고 숫자만 보관
+  reservationId Int
+
+  // 삭제 당시 방문 날짜: YYYY-MM-DD
+  visitDate String
+
+  // 삭제 당시 방문 시간: HH:mm
+  visitTime String
+
+  // 삭제 당시 예약 상태
+  status ReservationStatus
+
+  // 삭제한 관리자 ID
+  deletedById Int
+
+  // 삭제한 관리자
+  deletedBy AdminUser @relation(fields: [deletedById], references: [id])
+
+  // 삭제 당시 예약 전체 데이터
+  // 나중에 어떤 예약이 삭제됐는지 확인용
+  deletedData Json
+
+  // 삭제된 시간
   createdAt DateTime @default(now())
 }
 
