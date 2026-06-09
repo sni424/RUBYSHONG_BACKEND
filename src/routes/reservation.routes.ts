@@ -55,6 +55,7 @@ router.get('/available-times', async (req: Request, res: Response) => {
     const reservations = await prisma.reservation.findMany({
       where: {
         visitDate: date,
+        deletedAt: null,
         status: {
           not: 'cancelled',
         },
@@ -133,6 +134,24 @@ router.post('/', async (req: Request, res: Response) => {
         message: '개인정보 수집 및 이용에 동의해주세요.',
       });
     }
+    // 삭제되지 않았고 취소되지 않은 예약 중 같은 날짜/시간 예약이 있는지 확인
+    const existingReservation = await prisma.reservation.findFirst({
+      where: {
+        visitDate,
+        visitTime,
+        deletedAt: null,
+        status: {
+          not: 'cancelled',
+        },
+      },
+    });
+
+    if (existingReservation) {
+      return res.status(409).json({
+        success: false,
+        message: '이미 예약된 시간입니다.',
+      });
+    }
 
     // 예약 생성
     const reservation = await prisma.reservation.create({
@@ -171,8 +190,17 @@ router.post('/', async (req: Request, res: Response) => {
 // 관리자 예약 목록 조회 API
 router.get('/admin', async (req: Request, res: Response) => {
   try {
+    // includeDeleted=true이면 삭제 처리된 예약까지 조회
+    const includeDeleted = req.query.includeDeleted === 'true';
+    // 예약 목록 최신순 조회
+
     // 예약 목록 최신순 조회
     const reservations = await prisma.reservation.findMany({
+      where: includeDeleted
+        ? {}
+        : {
+            deletedAt: null,
+          },
       orderBy: [
         {
           visitDate: 'desc',
@@ -181,6 +209,32 @@ router.get('/admin', async (req: Request, res: Response) => {
           visitTime: 'desc',
         },
       ],
+      include: {
+        // 예약 변경 이력도 함께 조회
+        histories: {
+          orderBy: {
+            createdAt: 'desc',
+          },
+          include: {
+            changedBy: {
+              select: {
+                id: true,
+                email: true,
+                role: true,
+              },
+            },
+          },
+        },
+
+        // 삭제한 관리자 정보도 함께 조회
+        deletedBy: {
+          select: {
+            id: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
     });
 
     return res.json({
@@ -193,6 +247,166 @@ router.get('/admin', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: '예약 목록 조회 실패',
+    });
+  }
+});
+
+// 관리자 예약 수정 API
+// owner, manager, staff 모두 수정 가능
+router.patch('/admin/:id', async (req: Request, res: Response) => {
+  try {
+    const adminUser = req.adminUser;
+    const reservationId = Number(req.params.id);
+    const { name, phone, visitDate, visitTime, message, status } = req.body;
+
+    // 관리자 로그인 여부 확인
+    if (!adminUser) {
+      return res.status(401).json({
+        success: false,
+        message: '로그인이 필요합니다.',
+      });
+    }
+
+    // 예약 ID 검증
+    if (!Number.isInteger(reservationId)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바른 예약 ID를 입력해주세요.',
+      });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 수정 전 예약 데이터 조회
+      const before = await tx.reservation.findFirst({
+        where: {
+          id: reservationId,
+          deletedAt: null,
+        },
+      });
+
+      if (!before) {
+        throw new Error('RESERVATION_NOT_FOUND');
+      }
+
+      // 예약 정보 수정
+      const after = await tx.reservation.update({
+        where: {
+          id: reservationId,
+        },
+        data: {
+          name,
+          phone,
+          visitDate,
+          visitTime,
+          message,
+          status,
+        },
+      });
+
+      // 변경 이력 저장
+      await tx.reservationHistory.create({
+        data: {
+          reservationId,
+          action: status && status !== before.status ? 'status_changed' : 'updated',
+          changedById: adminUser.id,
+          beforeData: JSON.parse(JSON.stringify(before)),
+          afterData: JSON.parse(JSON.stringify(after)),
+        },
+      });
+
+      return after;
+    });
+
+    return res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'RESERVATION_NOT_FOUND') {
+      return res.status(404).json({
+        success: false,
+        message: '예약을 찾을 수 없습니다.',
+      });
+    }
+
+    console.error('예약 수정 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '예약 수정 실패',
+    });
+  }
+});
+
+// 관리자 예약 삭제 API
+// owner만 삭제 가능
+router.delete('/admin/:id', async (req: Request, res: Response) => {
+  try {
+    const adminUser = req.adminUser;
+    const reservationId = Number(req.params.id);
+
+    // 관리자 로그인 여부 확인
+    if (!adminUser) {
+      return res.status(401).json({
+        success: false,
+        message: '로그인이 필요합니다.',
+      });
+    }
+
+    // owner만 삭제 가능
+    if (adminUser.role !== 'owner') {
+      return res.status(403).json({
+        success: false,
+        message: '예약 삭제는 최고 관리자만 가능합니다.',
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 삭제 전 예약 데이터 조회
+      const before = await tx.reservation.findFirst({
+        where: {
+          id: reservationId,
+          deletedAt: null,
+        },
+      });
+
+      if (!before) {
+        throw new Error('RESERVATION_NOT_FOUND');
+      }
+
+      // 실제 삭제하지 않고 삭제 처리만 함
+      const after = await tx.reservation.update({
+        where: {
+          id: reservationId,
+        },
+        data: {
+          deletedAt: new Date(),
+          deletedById: adminUser.id,
+        },
+      });
+
+      // 삭제 이력 저장
+      await tx.reservationHistory.create({
+        data: {
+          reservationId,
+          action: 'deleted',
+          changedById: adminUser.id,
+          beforeData: JSON.parse(JSON.stringify(before)),
+          afterData: JSON.parse(JSON.stringify(after)),
+        },
+      });
+    });
+
+    return res.json({
+      success: true,
+      message: '예약이 삭제 처리되었습니다.',
+    });
+  } catch (error) {
+    console.error('예약 삭제 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '예약 삭제 실패',
     });
   }
 });

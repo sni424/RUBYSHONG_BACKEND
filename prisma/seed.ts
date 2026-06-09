@@ -14,6 +14,9 @@ const prisma = new PrismaClient({
 });
 
 // 추가할 관리자 계정 목록
+// owner: 전체 권한, 예약 삭제 가능
+// manager: 예약 변경 가능, 삭제 불가
+// staff: 예약 변경 가능, 삭제 불가
 const adminUsers = [
   {
     email: 'admin@rubyshong.com',
@@ -30,7 +33,7 @@ const adminUsers = [
     password: '1234',
     role: 'staff',
   },
-];
+] as const;
 
 async function main() {
   // 관리자 계정을 하나씩 추가 또는 업데이트

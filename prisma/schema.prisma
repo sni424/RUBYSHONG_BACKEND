@@ -6,6 +6,38 @@ datasource db {
   provider = "postgresql"
 }
 
+// 관리자 계정 권한
+// owner: 전체 권한, 예약 삭제 가능
+// manager: 예약 변경 가능, 삭제 불가
+// staff: 예약 변경 가능, 삭제 불가
+enum UserRole {
+  owner
+  manager
+  staff
+}
+
+// 예약 상태
+// pending: 대기
+// completed: 완료
+// cancelled: 취소
+enum ReservationStatus {
+  pending
+  completed
+  cancelled
+}
+
+// 예약 변경 이력 종류
+// created: 생성
+// updated: 예약 정보 수정
+// deleted: 삭제 처리
+// status_changed: 상태만 변경
+enum ReservationAction {
+  created
+  updated
+  deleted
+  status_changed
+}
+
 model Product {
   id            Int      @id @default(autoincrement())
 
@@ -47,11 +79,24 @@ model Product {
 
 model AdminUser {
   id        Int      @id @default(autoincrement())
+
+  // 관리자 로그인 이메일
   email     String   @unique
+
+  // 암호화된 비밀번호
   password  String
-  role      String   @default("admin")
+
+  // 계정 권한: owner, manager, staff
+  role      UserRole @default(staff)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // 이 관리자가 변경한 예약 이력 목록
+  reservationHistories ReservationHistory[]
+
+  // 이 관리자가 삭제 처리한 예약 목록
+  deletedReservations Reservation[] @relation("ReservationDeletedBy")
 }
 
 model Reservation {
@@ -70,17 +115,62 @@ model Reservation {
   // 상담 내용
   message   String?
 
-  // 예약 상태: pending, confirmed, cancelled, completed
-  status    String   @default("pending")
+  // 예약 상태: pending, completed, cancelled
+  status    ReservationStatus @default(pending)
 
   // 개인정보 동의 여부
   privacyAgreed Boolean @default(false)
 
+  // 삭제 처리된 시간
+  // 실제 DB에서 삭제하지 않고 이 값으로 삭제 여부를 판단
+  deletedAt DateTime?
+
+  // 삭제한 관리자 ID
+  // owner 권한 계정만 삭제 가능하게 API에서 검사
+  deletedById Int?
+
+  // 삭제한 관리자 정보
+  deletedBy AdminUser? @relation("ReservationDeletedBy", fields: [deletedById], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // 이 예약의 변경 이력 목록
+  histories ReservationHistory[]
+
   // 같은 날짜와 같은 시간에는 하나의 예약만 허용
-  @@unique([visitDate, visitTime])
+  // 주의: deletedAt이 null이면 PostgreSQL에서는 중복 방지가 완벽하지 않을 수 있음
+  @@unique([visitDate, visitTime, deletedAt])
+}
+
+model ReservationHistory {
+  id Int @id @default(autoincrement())
+
+  // 변경된 예약 ID
+  reservationId Int
+
+  // 변경된 예약
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+
+  // 변경 종류: created, updated, deleted, status_changed
+  action ReservationAction
+
+  // 변경한 관리자 ID
+  changedById Int
+
+  // 변경한 관리자
+  changedBy AdminUser @relation(fields: [changedById], references: [id])
+
+  // 변경 전 데이터
+  // 예: 수정 전 name, phone, visitDate, status 등
+  beforeData Json?
+
+  // 변경 후 데이터
+  // 예: 수정 후 name, phone, visitDate, status 등
+  afterData Json?
+
+  // 변경이 발생한 시간
+  createdAt DateTime @default(now())
 }
 
 model ContactInquiry {
