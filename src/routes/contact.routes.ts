@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import { authAdmin } from '../middlewares/adminAuth.middleware';
+import { requireRole } from '../middlewares/role.middleware';
 import prisma from '../lib/prisma';
 
 const router = Router();
@@ -115,10 +117,13 @@ router.patch('/admin/:id/status', async (req: Request<{ id: string }>, res: Resp
 });
 
 // 관리자 문의 삭제 API
-router.delete('/admin/:id', async (req: Request<{ id: string }>, res: Response) => {
+router.delete('/admin/:id', authAdmin, requireRole(['owner']), async (req: Request<{ id: string }>, res: Response) => {
   try {
     // URL에서 문의 id 가져오기
     const inquiryId = Number(req.params.id);
+
+    // 로그인한 관리자 정보 가져오기
+    const adminUser = req.adminUser;
 
     // 문의 id 검증
     if (Number.isNaN(inquiryId)) {
@@ -128,11 +133,44 @@ router.delete('/admin/:id', async (req: Request<{ id: string }>, res: Response) 
       });
     }
 
-    // 문의 삭제
-    await prisma.contactInquiry.delete({
-      where: {
-        id: inquiryId,
-      },
+    // 관리자 정보 검증
+    if (!adminUser) {
+      return res.status(401).json({
+        success: false,
+        message: '로그인이 필요합니다.',
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 삭제 전 문의 정보 조회
+      const inquiry = await tx.contactInquiry.findUnique({
+        where: {
+          id: inquiryId,
+        },
+      });
+
+      if (!inquiry) {
+        throw new Error('CONTACT_INQUIRY_NOT_FOUND');
+      }
+
+      // 문의 삭제 이력 저장
+      await tx.contactInquiryDeleteLog.create({
+        data: {
+          contactInquiryId: inquiry.id,
+          title: inquiry.title,
+          name: inquiry.name,
+          phone: inquiry.phone,
+          deletedById: adminUser.id,
+          deletedData: JSON.parse(JSON.stringify(inquiry)),
+        },
+      });
+
+      // 문의 실제 삭제
+      await tx.contactInquiry.delete({
+        where: {
+          id: inquiryId,
+        },
+      });
     });
 
     return res.json({
@@ -140,11 +178,51 @@ router.delete('/admin/:id', async (req: Request<{ id: string }>, res: Response) 
       message: '문의가 삭제되었습니다.',
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'CONTACT_INQUIRY_NOT_FOUND') {
+      return res.status(404).json({
+        success: false,
+        message: '문의를 찾을 수 없습니다.',
+      });
+    }
+
     console.error('문의 삭제 실패:', error);
 
     return res.status(500).json({
       success: false,
       message: '문의 삭제 실패',
+    });
+  }
+});
+
+// 관리자 문의 삭제 이력 조회 API
+router.get('/admin/delete-logs', authAdmin, async (req: Request, res: Response) => {
+  try {
+    // 최근 삭제순으로 문의 삭제 이력 조회
+    const deleteLogs = await prisma.contactInquiryDeleteLog.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+      include: {
+        deletedBy: {
+          select: {
+            id: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: deleteLogs,
+    });
+  } catch (error) {
+    console.error('문의 삭제 이력 조회 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '문의 삭제 이력 조회 실패',
     });
   }
 });
