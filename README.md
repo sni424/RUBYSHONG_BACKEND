@@ -65,33 +65,8 @@ RUBYSHONG Backend는 주얼리 쇼핑몰의 상품, 예약, 문의 데이터를 
 </details>
 <br />
 폴더 구조
+![폴더 구조](./src/docs/images/folder-structure.png)
 
-📦rubyshong_backend
- ┣ 📂.github/workflows
- ┃ ┗ 📜main_app-rubyshong-api.yml   # CI/CD 파이프라인
- ┣ 📂prisma
- ┃ ┣ 📂migrations
- ┃ ┣ 📜schema.prisma                # DB 스키마
- ┃ ┗ 📜seed.ts                      # 초기 데이터 시딩
- ┣ 📂src
- ┃ ┣ 📂data
- ┃ ┣ 📂lib
- ┃ ┃ ┣ 📜prisma.ts                  # Prisma 클라이언트 인스턴스
- ┃ ┃ ┗ 📜upload.ts                  # 업로드 유틸
- ┃ ┣ 📂middlewares
- ┃ ┃ ┣ 📜adminAuth.middleware.ts    # 관리자 인증
- ┃ ┃ ┣ 📜role.middleware.ts         # 권한 체크
- ┃ ┃ ┗ 📜upload.middleware.ts       # 파일 업로드 처리
- ┃ ┣ 📂routes
- ┃ ┃ ┣ 📜admin.routes.ts
- ┃ ┃ ┣ 📜contact.routes.ts
- ┃ ┃ ┣ 📜product.routes.ts
- ┃ ┃ ┗ 📜reservation.routes.ts
- ┃ ┣ 📂types
- ┃ ┃ ┣ 📜express.d.ts
- ┃ ┃ ┗ 📜product.ts
- ┃ ┗ 📜server.ts                    # 서버 엔트리 포인트
- ┗ 📜.env
 
 <br />
 프로젝트에서 신경 쓴 부분
