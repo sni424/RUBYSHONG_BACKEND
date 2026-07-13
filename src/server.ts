@@ -4,10 +4,13 @@ import productRoutes from './routes/product.routes';
 import adminRoutes from './routes/admin.routes';
 import reservationRoutes from './routes/reservation.routes';
 import contactRoutes from './routes/contact.routes';
+import authRoutes from './routes/auth.routes';
 
 const app = express();
 
 const PORT = process.env.PORT || 4000;
+
+app.use('/api/auth', authRoutes);
 
 app.use(
   cors({

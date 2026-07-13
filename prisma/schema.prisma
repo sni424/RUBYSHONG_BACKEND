@@ -270,3 +270,23 @@ model ContactInquiryDeleteLog {
   // 삭제된 시간
   createdAt DateTime @default(now())
 }
+
+
+model User {
+  id        Int      @id @default(autoincrement())
+
+  // 로그인 이메일
+  email     String   @unique
+
+  // 암호화된 비밀번호
+  password  String
+
+  // 회원 이름
+  name      String
+
+  // 연락처
+  phone     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

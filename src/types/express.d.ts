@@ -20,6 +20,12 @@ declare global {
         email: string;
         role: UserRole;
       };
+      user?: {
+        id: number;
+        email: string;
+        name: string;
+        phone: string | null;
+      };
     }
   }
 }
