@@ -6,18 +6,190 @@ import { authUser } from '../middlewares/authUser.middleware';
 
 const router = Router();
 
+// 이메일 형식 검증
+const isValidEmail = (email: string) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
+// 휴대폰 번호 형식 검증
+// 010-0000-0000 또는 01000000000 형태 허용
+const isValidPhone = (phone: string) => {
+  return /^010-?\d{4}-?\d{4}$/.test(phone);
+};
+
+// 휴대폰 번호 저장 형식 통일
+// 010-0000-0000 -> 01000000000
+const normalizePhone = (phone: string) => {
+  return phone.replace(/-/g, '');
+};
+
+// 휴대폰 인증번호 발송 API
+router.post('/phone/send-code', async (req: Request, res: Response) => {
+  try {
+    const { phone } = req.body;
+
+    // 휴대폰 번호 필수값 검증
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        message: '휴대폰 번호를 입력해주세요.',
+      });
+    }
+
+    // 휴대폰 번호 형식 검증
+    if (!isValidPhone(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바른 휴대폰 번호를 입력해주세요.',
+      });
+    }
+
+    // 휴대폰 번호 저장 형식 통일
+    const normalizedPhone = normalizePhone(phone);
+
+    // 6자리 인증번호 생성
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+
+    // 인증번호 만료 시간: 3분
+    const expiresAt = new Date(Date.now() + 3 * 60 * 1000);
+
+    // 인증번호 저장
+    await prisma.phoneVerification.create({
+      data: {
+        phone: normalizedPhone,
+        code,
+        expiresAt,
+      },
+    });
+
+    // TODO: 실제 SMS 발송 서비스 연결
+    // 개발 중에는 서버 콘솔에서 인증번호 확인
+    console.log('휴대폰 인증번호:', code);
+
+    return res.json({
+      success: true,
+      message: '인증번호가 발송되었습니다.',
+    });
+  } catch (error) {
+    console.error('인증번호 발송 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '인증번호 발송 실패',
+    });
+  }
+});
+
+// 휴대폰 인증번호 확인 API
+router.post('/phone/verify-code', async (req: Request, res: Response) => {
+  try {
+    const { phone, code } = req.body;
+
+    // 휴대폰 번호와 인증번호 필수값 검증
+    if (!phone || !code) {
+      return res.status(400).json({
+        success: false,
+        message: '휴대폰 번호와 인증번호를 입력해주세요.',
+      });
+    }
+
+    // 휴대폰 번호 형식 검증
+    if (!isValidPhone(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바른 휴대폰 번호를 입력해주세요.',
+      });
+    }
+
+    // 휴대폰 번호 저장 형식 통일
+    const normalizedPhone = normalizePhone(phone);
+
+    // 가장 최근의 유효한 인증번호 조회
+    const verification = await prisma.phoneVerification.findFirst({
+      where: {
+        phone: normalizedPhone,
+        code,
+        verified: false,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    // 인증번호가 없거나 만료된 경우
+    if (!verification) {
+      return res.status(400).json({
+        success: false,
+        message: '인증번호가 올바르지 않거나 만료되었습니다.',
+      });
+    }
+
+    // 인증 완료 처리
+    await prisma.phoneVerification.update({
+      where: {
+        id: verification.id,
+      },
+      data: {
+        verified: true,
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: '휴대폰 인증이 완료되었습니다.',
+    });
+  } catch (error) {
+    console.error('인증번호 확인 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '인증번호 확인 실패',
+    });
+  }
+});
+
 // 회원가입 API
 router.post('/signup', async (req: Request, res: Response) => {
   try {
     const { email, password, name, phone } = req.body;
 
     // 필수 값 검증
-    if (!email || !password || !name) {
+    if (!email || !password || !name || !phone) {
       return res.status(400).json({
         success: false,
         message: '필수 정보를 입력해주세요.',
       });
     }
+
+    // 이메일 형식 검증
+    if (!isValidEmail(email)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바른 이메일을 입력해주세요.',
+      });
+    }
+
+    // 비밀번호 길이 검증
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: '비밀번호는 8자 이상 입력해주세요.',
+      });
+    }
+
+    // 휴대폰 번호 형식 검증
+    if (!isValidPhone(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바른 휴대폰 번호를 입력해주세요.',
+      });
+    }
+
+    // 휴대폰 번호 저장 형식 통일
+    const normalizedPhone = normalizePhone(phone);
 
     // 이메일 중복 확인
     const existingUser = await prisma.user.findUnique({
@@ -33,6 +205,27 @@ router.post('/signup', async (req: Request, res: Response) => {
       });
     }
 
+    // 휴대폰 인증 완료 여부 확인
+    const phoneVerification = await prisma.phoneVerification.findFirst({
+      where: {
+        phone: normalizedPhone,
+        verified: true,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (!phoneVerification) {
+      return res.status(400).json({
+        success: false,
+        message: '휴대폰 인증을 완료해주세요.',
+      });
+    }
+
     // 비밀번호 해시 생성
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -42,13 +235,15 @@ router.post('/signup', async (req: Request, res: Response) => {
         email,
         password: hashedPassword,
         name,
-        phone,
+        phone: normalizedPhone,
+        phoneVerified: true,
       },
       select: {
         id: true,
         email: true,
         name: true,
         phone: true,
+        phoneVerified: true,
         createdAt: true,
       },
     });
@@ -80,6 +275,14 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
+    // 이메일 형식 검증
+    if (!isValidEmail(email)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바른 이메일을 입력해주세요.',
+      });
+    }
+
     // 회원 조회
     const user = await prisma.user.findUnique({
       where: {
@@ -87,7 +290,7 @@ router.post('/login', async (req: Request, res: Response) => {
       },
     });
 
-    if (!user) {
+    if (!user || !user.password) {
       return res.status(401).json({
         success: false,
         message: '이메일 또는 비밀번호가 올바르지 않습니다.',
@@ -120,7 +323,7 @@ router.post('/login', async (req: Request, res: Response) => {
         userId: user.id,
         email: user.email,
       },
-      process.env.JWT_SECRET!,
+      jwtSecret,
       {
         expiresIn: '7d',
       },
@@ -135,6 +338,7 @@ router.post('/login', async (req: Request, res: Response) => {
           email: user.email,
           name: user.name,
           phone: user.phone,
+          phoneVerified: user.phoneVerified,
         },
       },
     });
@@ -171,9 +375,19 @@ router.get('/me', authUser, async (req: Request, res: Response) => {
         email: true,
         name: true,
         phone: true,
+        phoneVerified: true,
+        provider: true,
+        providerId: true,
         createdAt: true,
       },
     });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '회원 정보를 찾을 수 없습니다.',
+      });
+    }
 
     return res.json({
       success: true,

@@ -271,6 +271,10 @@ model ContactInquiryDeleteLog {
   createdAt DateTime @default(now())
 }
 
+enum SocialProvider {
+  naver
+  kakao
+}
 
 model User {
   id        Int      @id @default(autoincrement())
@@ -279,13 +283,44 @@ model User {
   email     String   @unique
 
   // 암호화된 비밀번호
-  password  String
+  // SNS 회원은 비밀번호 없이 가입될 수 있음
+  password  String?
 
   // 회원 이름
   name      String
 
   // 연락처
   phone     String?
+
+  // 휴대폰 인증 여부
+  phoneVerified Boolean @default(false)
+
+  // SNS 로그인 제공자: naver, kakao
+  provider SocialProvider?
+
+  // SNS 제공자가 주는 고유 ID
+  providerId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, providerId])
+}
+
+model PhoneVerification {
+  id        Int      @id @default(autoincrement())
+
+  // 인증할 휴대폰 번호
+  phone     String
+
+  // 인증번호
+  code      String
+
+  // 인증 완료 여부
+  verified  Boolean  @default(false)
+
+  // 인증번호 만료 시간
+  expiresAt DateTime
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

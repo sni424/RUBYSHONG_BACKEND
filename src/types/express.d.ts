@@ -25,6 +25,7 @@ declare global {
         email: string;
         name: string;
         phone: string | null;
+        phoneVerified?: boolean;
       };
     }
   }
