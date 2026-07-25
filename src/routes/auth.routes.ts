@@ -67,6 +67,9 @@ router.post('/phone/send-code', async (req: Request, res: Response) => {
     return res.json({
       success: true,
       message: '인증번호가 발송되었습니다.',
+      data: {
+        code,
+      },
     });
   } catch (error) {
     console.error('[send-code] error:', error);
