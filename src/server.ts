@@ -10,6 +10,7 @@ const app = express();
 
 const PORT = process.env.PORT || 4000;
 
+// CORS 허용 설정
 const corsOptions = {
   origin: [
     'http://localhost:5173',
@@ -21,13 +22,18 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
+// CORS는 모든 라우터보다 먼저 적용
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+
+// JSON 요청 본문 파싱
 app.use(express.json());
 
+// 서버 상태 확인 API
 app.get('/', (req, res) => {
   res.send('RUBYSHONG API SERVER');
 });
+
+// API 라우터 등록
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/admin', adminRoutes);

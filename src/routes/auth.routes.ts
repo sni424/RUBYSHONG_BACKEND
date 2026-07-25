@@ -26,9 +26,11 @@ const normalizePhone = (phone: string) => {
 // 휴대폰 인증번호 발송 API
 router.post('/phone/send-code', async (req: Request, res: Response) => {
   try {
-    const { phone } = req.body;
+    console.log('[send-code] start');
 
-    // 휴대폰 번호 필수값 검증
+    const { phone } = req.body;
+    console.log('[send-code] phone:', phone);
+
     if (!phone) {
       return res.status(400).json({
         success: false,
@@ -36,7 +38,6 @@ router.post('/phone/send-code', async (req: Request, res: Response) => {
       });
     }
 
-    // 휴대폰 번호 형식 검증
     if (!isValidPhone(phone)) {
       return res.status(400).json({
         success: false,
@@ -44,16 +45,14 @@ router.post('/phone/send-code', async (req: Request, res: Response) => {
       });
     }
 
-    // 휴대폰 번호 저장 형식 통일
     const normalizedPhone = normalizePhone(phone);
+    console.log('[send-code] normalizedPhone:', normalizedPhone);
 
-    // 6자리 인증번호 생성
     const code = String(Math.floor(100000 + Math.random() * 900000));
-
-    // 인증번호 만료 시간: 3분
     const expiresAt = new Date(Date.now() + 3 * 60 * 1000);
 
-    // 인증번호 저장
+    console.log('[send-code] before db create');
+
     await prisma.phoneVerification.create({
       data: {
         phone: normalizedPhone,
@@ -62,16 +61,15 @@ router.post('/phone/send-code', async (req: Request, res: Response) => {
       },
     });
 
-    // TODO: 실제 SMS 발송 서비스 연결
-    // 개발 중에는 서버 콘솔에서 인증번호 확인
-    console.log('휴대폰 인증번호:', code);
+    console.log('[send-code] after db create');
+    console.log('[send-code] verification code:', code);
 
     return res.json({
       success: true,
       message: '인증번호가 발송되었습니다.',
     });
   } catch (error) {
-    console.error('인증번호 발송 실패:', error);
+    console.error('[send-code] error:', error);
 
     return res.status(500).json({
       success: false,
