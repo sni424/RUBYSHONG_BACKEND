@@ -404,4 +404,176 @@ router.get('/me', authUser, async (req: Request, res: Response) => {
   }
 });
 
+// 네이버 로그인 시작 API
+router.get('/naver', (req: Request, res: Response) => {
+  const clientId = process.env.NAVER_CLIENT_ID;
+  const callbackUrl = process.env.NAVER_CALLBACK_URL;
+
+  if (!clientId || !callbackUrl) {
+    return res.status(500).json({
+      success: false,
+      message: '네이버 로그인 설정이 없습니다.',
+    });
+  }
+
+  // CSRF 방지용 state 값
+  const state = Math.random().toString(36).slice(2);
+
+  const naverAuthUrl = new URL('https://nid.naver.com/oauth2.0/authorize');
+
+  naverAuthUrl.searchParams.set('response_type', 'code');
+  naverAuthUrl.searchParams.set('client_id', clientId);
+  naverAuthUrl.searchParams.set('redirect_uri', callbackUrl);
+  naverAuthUrl.searchParams.set('state', state);
+
+  return res.redirect(naverAuthUrl.toString());
+});
+
+// 네이버 로그인 콜백 API
+router.get('/naver/callback', async (req: Request, res: Response) => {
+  try {
+    const { code, state } = req.query;
+
+    const clientId = process.env.NAVER_CLIENT_ID;
+    const clientSecret = process.env.NAVER_CLIENT_SECRET;
+    const callbackUrl = process.env.NAVER_CALLBACK_URL;
+    const jwtSecret = process.env.JWT_SECRET;
+    const clientUrl = process.env.CLIENT_URL;
+
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: '네이버 인증 코드가 없습니다.',
+      });
+    }
+
+    if (!clientId || !clientSecret || !callbackUrl || !jwtSecret || !clientUrl) {
+      return res.status(500).json({
+        success: false,
+        message: '네이버 로그인 설정이 없습니다.',
+      });
+    }
+
+    // 네이버 access token 요청
+    const tokenResponse = await fetch('https://nid.naver.com/oauth2.0/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: clientId,
+        client_secret: clientSecret,
+        code,
+        state: typeof state === 'string' ? state : '',
+        redirect_uri: callbackUrl,
+      }),
+    });
+
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      return res.status(400).json({
+        success: false,
+        message: '네이버 토큰 발급에 실패했습니다.',
+      });
+    }
+
+    // 네이버 프로필 조회
+    const profileResponse = await fetch('https://openapi.naver.com/v1/nid/me', {
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+      },
+    });
+
+    const profileData = await profileResponse.json();
+
+    if (!profileResponse.ok || profileData.resultcode !== '00') {
+      return res.status(400).json({
+        success: false,
+        message: '네이버 프로필 조회에 실패했습니다.',
+      });
+    }
+
+    const naverProfile = profileData.response;
+
+    const providerId = String(naverProfile.id);
+    const email = String(naverProfile.email);
+    const name = String(naverProfile.name || naverProfile.nickname || '네이버 회원');
+    const phone = naverProfile.mobile ? String(naverProfile.mobile).replace(/-/g, '') : null;
+
+    // 기존 네이버 회원 조회
+    let user = await prisma.user.findFirst({
+      where: {
+        provider: 'naver',
+        providerId,
+      },
+    });
+
+    // 기존 네이버 회원이 없으면 이메일 기준 기존 회원도 확인
+    if (!user) {
+      user = await prisma.user.findUnique({
+        where: {
+          email,
+        },
+      });
+    }
+
+    // 회원이 없으면 새로 생성
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email,
+          password: null,
+          name,
+          phone,
+          phoneVerified: Boolean(phone),
+          provider: 'naver',
+          providerId,
+        },
+      });
+    }
+
+    // 기존 이메일 회원이면 네이버 정보 연결
+    if (!user.provider || !user.providerId) {
+      user = await prisma.user.update({
+        where: {
+          id: user.id,
+        },
+        data: {
+          provider: 'naver',
+          providerId,
+          phone: user.phone ?? phone,
+          phoneVerified: user.phoneVerified || Boolean(phone),
+        },
+      });
+    }
+
+    // JWT 발급
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+      },
+      jwtSecret,
+      {
+        expiresIn: '7d',
+      },
+    );
+
+    // 프론트로 로그인 결과 전달
+    const redirectUrl = new URL(`${clientUrl}/oauth/callback`);
+    redirectUrl.searchParams.set('token', token);
+
+    return res.redirect(redirectUrl.toString());
+  } catch (error) {
+    console.error('네이버 로그인 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '네이버 로그인 실패',
+    });
+  }
+});
+
 export default router;
