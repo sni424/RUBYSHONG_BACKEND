@@ -576,4 +576,167 @@ router.get('/naver/callback', async (req: Request, res: Response) => {
   }
 });
 
+// 카카오 로그인 시작 API
+router.get('/kakao', (req: Request, res: Response) => {
+  const clientId = process.env.KAKAO_CLIENT_ID;
+  const callbackUrl = process.env.KAKAO_CALLBACK_URL;
+
+  if (!clientId || !callbackUrl) {
+    return res.status(500).json({
+      success: false,
+      message: '카카오 로그인 설정이 없습니다.',
+    });
+  }
+
+  const kakaoAuthUrl = new URL('https://kauth.kakao.com/oauth/authorize');
+
+  kakaoAuthUrl.searchParams.set('response_type', 'code');
+  kakaoAuthUrl.searchParams.set('client_id', clientId);
+  kakaoAuthUrl.searchParams.set('redirect_uri', callbackUrl);
+
+  return res.redirect(kakaoAuthUrl.toString());
+});
+
+// 카카오 로그인 콜백 API
+router.get('/kakao/callback', async (req: Request, res: Response) => {
+  try {
+    const { code } = req.query;
+
+    const clientId = process.env.KAKAO_CLIENT_ID;
+    const callbackUrl = process.env.KAKAO_CALLBACK_URL;
+    const jwtSecret = process.env.JWT_SECRET;
+    const clientUrl = process.env.CLIENT_URL;
+
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: '카카오 인증 코드가 없습니다.',
+      });
+    }
+
+    if (!clientId || !callbackUrl || !jwtSecret || !clientUrl) {
+      return res.status(500).json({
+        success: false,
+        message: '카카오 로그인 설정이 없습니다.',
+      });
+    }
+
+    // 카카오 access token 요청
+    const tokenResponse = await fetch('https://kauth.kakao.com/oauth/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: clientId,
+        redirect_uri: callbackUrl,
+        code,
+      }),
+    });
+
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      return res.status(400).json({
+        success: false,
+        message: '카카오 토큰 발급에 실패했습니다.',
+      });
+    }
+
+    // 카카오 프로필 조회
+    const profileResponse = await fetch('https://kapi.kakao.com/v2/user/me', {
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+      },
+    });
+
+    const profileData = await profileResponse.json();
+
+    if (!profileResponse.ok || !profileData.id) {
+      return res.status(400).json({
+        success: false,
+        message: '카카오 프로필 조회에 실패했습니다.',
+      });
+    }
+
+    const kakaoAccount = profileData.kakao_account ?? {};
+    const profile = kakaoAccount.profile ?? {};
+
+    const providerId = String(profileData.id);
+    const email = typeof kakaoAccount.email === 'string' ? kakaoAccount.email : `kakao_${providerId}@rubyshong.local`;
+    const name = typeof profile.nickname === 'string' && profile.nickname ? profile.nickname : '카카오 회원';
+
+    // 기존 카카오 회원 조회
+    let user = await prisma.user.findFirst({
+      where: {
+        provider: 'kakao',
+        providerId,
+      },
+    });
+
+    // 기존 카카오 회원이 없으면 이메일 기준 기존 회원도 확인
+    if (!user) {
+      user = await prisma.user.findUnique({
+        where: {
+          email,
+        },
+      });
+    }
+
+    // 회원이 없으면 새로 생성
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email,
+          password: null,
+          name,
+          phone: null,
+          phoneVerified: false,
+          provider: 'kakao',
+          providerId,
+        },
+      });
+    }
+
+    // 기존 이메일 회원이면 카카오 정보 연결
+    if (!user.provider || !user.providerId) {
+      user = await prisma.user.update({
+        where: {
+          id: user.id,
+        },
+        data: {
+          provider: 'kakao',
+          providerId,
+        },
+      });
+    }
+
+    // JWT 발급
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+      },
+      jwtSecret,
+      {
+        expiresIn: '7d',
+      },
+    );
+
+    // 프론트 OAuth 콜백 페이지로 이동
+    const redirectUrl = new URL(`${clientUrl}/oauth/callback`);
+    redirectUrl.searchParams.set('token', token);
+
+    return res.redirect(redirectUrl.toString());
+  } catch (error) {
+    console.error('카카오 로그인 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '카카오 로그인 실패',
+    });
+  }
+});
+
 export default router;
