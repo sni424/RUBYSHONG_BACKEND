@@ -13,51 +13,93 @@ const createOrderCode = () => {
 router.post('/', async (req: Request, res: Response) => {
   try {
     // 프론트에서 보낸 주문 정보
-    const { productId, quantity, ordererName, ordererPhone, userId } = req.body;
+    // items: [{ productId, quantity }]
+    const { items, ordererName, ordererPhone, userId } = req.body;
 
     // 필수 값 검증
-    if (!productId || !quantity || !ordererName || !ordererPhone) {
+    if (!items || !Array.isArray(items) || items.length === 0 || !ordererName || !ordererPhone) {
       return res.status(400).json({
         success: false,
         message: '필수 주문 정보를 입력해주세요.',
       });
     }
 
-    // 수량 검증
-    if (quantity < 1) {
-      return res.status(400).json({
-        success: false,
-        message: '주문 수량이 올바르지 않습니다.',
-      });
+    // 상품 ID와 수량 검증
+    for (const item of items) {
+      if (!item.productId || !item.quantity || Number(item.quantity) < 1) {
+        return res.status(400).json({
+          success: false,
+          message: '주문 상품 정보가 올바르지 않습니다.',
+        });
+      }
     }
 
-    // 상품 조회
-    const product = await prisma.product.findUnique({
+    // 중복 상품 ID 제거
+    const productIds = [...new Set(items.map((item) => Number(item.productId)))];
+
+    // 주문하려는 상품 목록 조회
+    const products = await prisma.product.findMany({
       where: {
-        id: Number(productId),
+        id: {
+          in: productIds,
+        },
       },
     });
 
-    // 상품이 없거나 판매 중이 아니면 주문 불가
-    if (!product || !product.isVisible || product.status !== 'selling') {
+    // 요청한 상품을 모두 찾았는지 확인
+    if (products.length !== productIds.length) {
       return res.status(400).json({
         success: false,
-        message: '구매할 수 없는 상품입니다.',
+        message: '구매할 수 없는 상품이 포함되어 있습니다.',
       });
     }
 
-    // 재고 확인
-    if (product.stock < Number(quantity)) {
-      return res.status(400).json({
-        success: false,
-        message: '상품 재고가 부족합니다.',
-      });
-    }
+    // 주문 상품 데이터 생성
+    const orderItems = items.map((item) => {
+      const product = products.find((product) => product.id === Number(item.productId));
+      const quantity = Number(item.quantity);
 
-    // 서버 기준 최종 금액 계산
-    const price = product.finalPrice;
-    const totalAmount = price * Number(quantity);
+      // 상품 판매 가능 여부 확인
+      if (!product || !product.isVisible || product.status !== 'selling') {
+        throw new Error('구매할 수 없는 상품입니다.');
+      }
+
+      // 재고 확인
+      if (product.stock < quantity) {
+        throw new Error(`${product.name} 상품 재고가 부족합니다.`);
+      }
+
+      // 서버 기준 상품별 결제 금액 계산
+      const amount = product.finalPrice * quantity;
+
+      return {
+        product,
+        quantity,
+        amount,
+      };
+    });
+
+    // 서버 기준 총 결제 금액 계산
+    const totalAmount = orderItems.reduce((sum, item) => sum + item.amount, 0);
+
+    // 주문번호 생성
     const orderCode = createOrderCode();
+
+    // 첫 번째 주문 상품
+    const firstOrderItem = orderItems[0];
+
+    if (!firstOrderItem) {
+      return res.status(400).json({
+        success: false,
+        message: '주문 상품 정보가 올바르지 않습니다.',
+      });
+    }
+
+    // 토스 결제창에 보여줄 주문명
+    const orderName =
+      orderItems.length === 1
+        ? firstOrderItem.product.name
+        : `${firstOrderItem.product.name} 외 ${orderItems.length - 1}건`;
 
     // 주문과 결제 준비 데이터를 함께 생성
     const order = await prisma.order.create({
@@ -68,16 +110,14 @@ router.post('/', async (req: Request, res: Response) => {
         ordererPhone,
         totalAmount,
         items: {
-          create: [
-            {
-              productId: product.id,
-              productName: product.name,
-              thumbnailUrl: product.thumbnailUrl,
-              price,
-              quantity: Number(quantity),
-              amount: totalAmount,
-            },
-          ],
+          create: orderItems.map((item) => ({
+            productId: item.product.id,
+            productName: item.product.name,
+            thumbnailUrl: item.product.thumbnailUrl,
+            price: item.product.finalPrice,
+            quantity: item.quantity,
+            amount: item.amount,
+          })),
         },
         payment: {
           create: {
@@ -85,10 +125,26 @@ router.post('/', async (req: Request, res: Response) => {
             amount: totalAmount,
           },
         },
+        histories: {
+          create: {
+            action: 'created',
+            afterData: {
+              orderCode,
+              totalAmount,
+              items: orderItems.map((item) => ({
+                productId: item.product.id,
+                productName: item.product.name,
+                quantity: item.quantity,
+                amount: item.amount,
+              })),
+            },
+          },
+        },
       },
       include: {
         items: true,
         payment: true,
+        histories: true,
       },
     });
 
@@ -97,12 +153,19 @@ router.post('/', async (req: Request, res: Response) => {
       data: {
         orderId: order.id,
         orderCode: order.orderCode,
-        orderName: product.name,
+        orderName,
         amount: order.totalAmount,
       },
     });
   } catch (error) {
     console.error('주문 생성 실패:', error);
+
+    if (error instanceof Error) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
 
     return res.status(500).json({
       success: false,

@@ -104,6 +104,9 @@ model AdminUser {
 
   // 이 관리자가 삭제한 문의 기록 목록
   contactInquiryDeleteLogs ContactInquiryDeleteLog[]
+
+  // 이 관리자가 처리한 주문 이력 목록
+  orderHistories OrderHistory[]
 }
 
 model ProductDeleteLog {
@@ -393,6 +396,9 @@ model Order {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // 주문 변경 이력
+  histories OrderHistory[]
 }
 
 model OrderItem {
@@ -463,4 +469,35 @@ model Payment {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum OrderAction {
+  created
+  paid
+  cancelled
+  refunded
+  status_changed
+}
+
+model OrderHistory {
+  id Int @id @default(autoincrement())
+
+  // 주문 ID
+  orderId Int
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // 처리한 관리자 ID
+  changedById Int?
+  changedBy AdminUser? @relation(fields: [changedById], references: [id])
+
+  // 이력 종류
+  action OrderAction
+
+  // 변경 전 데이터
+  beforeData Json?
+
+  // 변경 후 데이터
+  afterData Json?
+
+  createdAt DateTime @default(now())
 }
