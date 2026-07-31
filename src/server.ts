@@ -6,6 +6,7 @@ import reservationRoutes from './routes/reservation.routes';
 import contactRoutes from './routes/contact.routes';
 import authRoutes from './routes/auth.routes';
 import orderRoutes from './routes/order.routes';
+import paymentRoutes from './routes/payment.routes';
 
 const app = express();
 
@@ -39,6 +40,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 //주문
 app.use('/api/orders', orderRoutes);
+//결제
+app.use('/api/payments', paymentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/reservations', reservationRoutes);
 app.use('/api/contacts', contactRoutes);
