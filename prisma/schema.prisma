@@ -73,6 +73,9 @@ model Product {
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  // 이 상품이 포함된 주문 상품 목록
+  orderItems OrderItem[]
 }
 
 model AdminUser {
@@ -305,6 +308,8 @@ model User {
   updatedAt DateTime @updatedAt
 
   @@unique([provider, providerId])
+  // 이 회원의 주문 목록
+  orders Order[]
 }
 
 model PhoneVerification {
@@ -321,6 +326,140 @@ model PhoneVerification {
 
   // 인증번호 만료 시간
   expiresAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 주문 상태
+// pending: 결제 진행 중
+// paid: 결제 완료
+// cancelled: 주문 취소
+// failed: 결제 실패
+// refunded: 환불 완료
+enum OrderStatus {
+  pending
+  paid
+  cancelled
+  failed
+  refunded
+}
+
+// 결제 상태
+// ready: 결제 승인 전
+// paid: 결제 승인 완료
+// failed: 결제 실패
+// cancelled: 결제 취소
+// refunded: 환불 완료
+enum PaymentStatus {
+  ready
+  paid
+  failed
+  cancelled
+  refunded
+}
+
+model Order {
+  id Int @id @default(autoincrement())
+
+  // 주문번호
+  // 토스페이먼츠 orderId로도 사용
+  orderCode String @unique
+
+  // 주문 회원 ID
+  // 비회원 주문도 허용하려면 nullable 유지
+  userId Int?
+
+  // 주문 회원
+  user User? @relation(fields: [userId], references: [id])
+
+  // 주문자 이름
+  ordererName String
+
+  // 주문자 휴대폰 번호
+  ordererPhone String
+
+  // 주문 총 금액
+  totalAmount Int
+
+  // 주문 상태
+  status OrderStatus @default(pending)
+
+  // 주문 상품 목록
+  items OrderItem[]
+
+  // 결제 정보
+  payment Payment?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OrderItem {
+  id Int @id @default(autoincrement())
+
+  // 주문 ID
+  orderId Int
+
+  // 주문
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // 상품 ID
+  productId Int
+
+  // 상품
+  product Product @relation(fields: [productId], references: [id])
+
+  // 주문 당시 상품명
+  productName String
+
+  // 주문 당시 상품 썸네일 URL
+  thumbnailUrl String
+
+  // 주문 당시 상품 가격
+  price Int
+
+  // 주문 수량
+  quantity Int @default(1)
+
+  // 주문 상품 총 금액
+  amount Int
+
+  createdAt DateTime @default(now())
+}
+
+model Payment {
+  id Int @id @default(autoincrement())
+
+  // 주문 ID
+  orderId Int @unique
+
+  // 주문
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // 토스페이먼츠 paymentKey
+  paymentKey String? @unique
+
+  // 토스페이먼츠 orderId
+  tossOrderId String @unique
+
+  // 결제 금액
+  amount Int
+
+  // 결제 상태
+  status PaymentStatus @default(ready)
+
+  // 결제 수단
+  method String?
+
+  // 결제 승인 시간
+  approvedAt DateTime?
+
+  // 결제 실패 사유
+  failureReason String?
+
+  // 토스 원본 응답
+  rawData Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

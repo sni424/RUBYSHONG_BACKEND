@@ -5,6 +5,7 @@ import adminRoutes from './routes/admin.routes';
 import reservationRoutes from './routes/reservation.routes';
 import contactRoutes from './routes/contact.routes';
 import authRoutes from './routes/auth.routes';
+import orderRoutes from './routes/order.routes';
 
 const app = express();
 
@@ -36,6 +37,8 @@ app.get('/', (req, res) => {
 // API 라우터 등록
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+//주문
+app.use('/api/orders', orderRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/reservations', reservationRoutes);
 app.use('/api/contacts', contactRoutes);
