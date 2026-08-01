@@ -7,6 +7,7 @@ import contactRoutes from './routes/contact.routes';
 import authRoutes from './routes/auth.routes';
 import orderRoutes from './routes/order.routes';
 import paymentRoutes from './routes/payment.routes';
+import customerRoutes from './routes/customer.routes';
 
 const app = express();
 
@@ -45,6 +46,8 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/reservations', reservationRoutes);
 app.use('/api/contacts', contactRoutes);
+//고객정보
+app.use('/api/customers', customerRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
