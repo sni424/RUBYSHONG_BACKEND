@@ -334,19 +334,6 @@ model PhoneVerification {
   updatedAt DateTime @updatedAt
 }
 
-// 주문 상태
-// pending: 결제 진행 중
-// paid: 결제 완료
-// cancelled: 주문 취소
-// failed: 결제 실패
-// refunded: 환불 완료
-enum OrderStatus {
-  pending
-  paid
-  cancelled
-  failed
-  refunded
-}
 
 // 결제 상태
 // ready: 결제 승인 전
@@ -482,22 +469,50 @@ enum OrderAction {
 model OrderHistory {
   id Int @id @default(autoincrement())
 
-  // 주문 ID
+  // 변경된 주문 ID
   orderId Int
+
+  // 변경된 주문
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   // 처리한 관리자 ID
+  // 고객 결제 완료처럼 시스템이 자동 생성한 이력은 null 가능
   changedById Int?
+
+  // 처리한 관리자
   changedBy AdminUser? @relation(fields: [changedById], references: [id])
 
-  // 이력 종류
+  // 이력 종류: created, paid, cancelled, refunded, status_changed
   action OrderAction
 
   // 변경 전 데이터
+  // 예: 변경 전 주문 상태, 결제 상태, 재고 등
   beforeData Json?
 
   // 변경 후 데이터
+  // 예: 변경 후 주문 상태, 결제 상태, 재고 등
   afterData Json?
 
+  // 이력이 생성된 시간
   createdAt DateTime @default(now())
+}
+
+// 주문 상태
+// pending: 결제 진행 중
+// paid: 결제 완료
+// preparing: 배송 준비 중
+// shipped: 배송 중
+// delivered: 배송 완료
+// cancelled: 주문 취소
+// failed: 결제 실패
+// refunded: 환불 완료
+enum OrderStatus {
+  pending
+  paid
+  preparing
+  shipped
+  delivered
+  cancelled
+  failed
+  refunded
 }

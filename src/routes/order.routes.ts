@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
+import { authAdmin } from '../middlewares/adminAuth.middleware';
 
 const router = Router();
 
@@ -170,6 +171,357 @@ router.post('/', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: '주문 생성 실패',
+    });
+  }
+});
+
+// 관리자 주문 목록 조회 API
+router.get('/admin', authAdmin, async (req: Request, res: Response) => {
+  try {
+    // 주문 목록 최신순 조회
+    const orders = await prisma.order.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            phone: true,
+          },
+        },
+        items: true,
+        payment: true,
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: orders,
+    });
+  } catch (error) {
+    console.error('관리자 주문 목록 조회 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '주문 목록 조회 실패',
+    });
+  }
+});
+
+// 관리자 주문 상세 조회 API
+router.get('/admin/:id', authAdmin, async (req: Request<{ id: string }>, res: Response) => {
+  try {
+    // URL에서 주문 ID 가져오기
+    const orderId = Number(req.params.id);
+
+    // 주문 ID 검증
+    if (Number.isNaN(orderId)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바르지 않은 주문 ID입니다.',
+      });
+    }
+
+    // 주문 상세 조회
+    const order = await prisma.order.findUnique({
+      where: {
+        id: orderId,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            phone: true,
+          },
+        },
+        items: true,
+        payment: true,
+        histories: {
+          orderBy: {
+            createdAt: 'desc',
+          },
+          include: {
+            changedBy: {
+              select: {
+                id: true,
+                email: true,
+                role: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: '주문을 찾을 수 없습니다.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: order,
+    });
+  } catch (error) {
+    console.error('관리자 주문 상세 조회 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '주문 상세 조회 실패',
+    });
+  }
+});
+
+// 관리자 주문 상태 변경 API
+router.patch('/admin/:id/status', authAdmin, async (req: Request<{ id: string }>, res: Response) => {
+  try {
+    // URL에서 주문 ID 가져오기
+    const orderId = Number(req.params.id);
+
+    // 변경할 주문 상태
+    const { status } = req.body;
+
+    // 관리자 ID
+    const adminId = req.admin?.id;
+
+    // 주문 ID 검증
+    if (Number.isNaN(orderId)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바르지 않은 주문 ID입니다.',
+      });
+    }
+
+    // 관리자 로그인 정보 확인
+    if (!adminId) {
+      return res.status(401).json({
+        success: false,
+        message: '관리자 로그인이 필요합니다.',
+      });
+    }
+
+    // 허용할 상태 목록
+    const allowedStatuses = ['paid', 'preparing', 'shipped', 'delivered', 'cancelled'];
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바르지 않은 주문 상태입니다.',
+      });
+    }
+
+    // 기존 주문 조회
+    const order = await prisma.order.findUnique({
+      where: {
+        id: orderId,
+      },
+    });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: '주문을 찾을 수 없습니다.',
+      });
+    }
+
+    // 환불 완료 주문은 상태 변경 불가
+    if (order.status === 'refunded') {
+      return res.status(400).json({
+        success: false,
+        message: '환불된 주문은 상태를 변경할 수 없습니다.',
+      });
+    }
+
+    // 결제 실패 주문은 상태 변경 불가
+    if (order.status === 'failed') {
+      return res.status(400).json({
+        success: false,
+        message: '결제 실패 주문은 상태를 변경할 수 없습니다.',
+      });
+    }
+
+    // 주문 상태 변경과 이력 저장
+    const updatedOrder = await prisma.order.update({
+      where: {
+        id: orderId,
+      },
+      data: {
+        status,
+        histories: {
+          create: {
+            action: 'status_changed',
+            changedById: adminId,
+            beforeData: {
+              status: order.status,
+            },
+            afterData: {
+              status,
+            },
+          },
+        },
+      },
+      include: {
+        items: true,
+        payment: true,
+        histories: true,
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: updatedOrder,
+    });
+  } catch (error) {
+    console.error('관리자 주문 상태 변경 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '주문 상태 변경 실패',
+    });
+  }
+});
+
+// 관리자 주문 환불 처리 API
+router.post('/admin/:id/refund', authAdmin, async (req: Request<{ id: string }>, res: Response) => {
+  try {
+    // URL에서 주문 ID 가져오기
+    const orderId = Number(req.params.id);
+
+    // 관리자 ID
+    const adminId = req.admin?.id;
+
+    // 주문 ID 검증
+    if (Number.isNaN(orderId)) {
+      return res.status(400).json({
+        success: false,
+        message: '올바르지 않은 주문 ID입니다.',
+      });
+    }
+
+    // 관리자 로그인 정보 확인
+    if (!adminId) {
+      return res.status(401).json({
+        success: false,
+        message: '관리자 로그인이 필요합니다.',
+      });
+    }
+
+    // owner 권한만 환불 가능
+    if (req.admin?.role !== 'owner') {
+      return res.status(403).json({
+        success: false,
+        message: 'owner 권한만 환불 처리할 수 있습니다.',
+      });
+    }
+
+    // 주문 조회
+    const order = await prisma.order.findUnique({
+      where: {
+        id: orderId,
+      },
+      include: {
+        items: true,
+        payment: true,
+      },
+    });
+
+    if (!order || !order.payment) {
+      return res.status(404).json({
+        success: false,
+        message: '주문 정보를 찾을 수 없습니다.',
+      });
+    }
+
+    // TypeScript null 체크를 위한 결제 정보 변수
+    const payment = order.payment;
+
+    // 결제 완료 또는 배송 준비 중인 주문만 환불 처리 가능
+    if (order.status !== 'paid' && order.status !== 'preparing') {
+      return res.status(400).json({
+        success: false,
+        message: '환불 처리할 수 없는 주문 상태입니다.',
+      });
+    }
+
+    // 테스트용 환불 처리
+    // TODO: 실결제 전환 시 토스 결제 취소 API를 먼저 호출한 뒤 상태를 변경해야 함
+    const refundedOrder = await prisma.$transaction(async (tx) => {
+      // 상품 재고 복구
+      for (const item of order.items) {
+        await tx.product.update({
+          where: {
+            id: item.productId,
+          },
+          data: {
+            stock: {
+              increment: item.quantity,
+            },
+          },
+        });
+      }
+
+      // 결제 상태 환불 완료로 변경
+      await tx.payment.update({
+        where: {
+          orderId: order.id,
+        },
+        data: {
+          status: 'refunded',
+        },
+      });
+
+      // 주문 상태 환불 완료로 변경 및 이력 저장
+      return tx.order.update({
+        where: {
+          id: order.id,
+        },
+        data: {
+          status: 'refunded',
+          histories: {
+            create: {
+              action: 'refunded',
+              changedById: adminId,
+              beforeData: {
+                status: order.status,
+                paymentStatus: payment.status,
+              },
+              afterData: {
+                status: 'refunded',
+                paymentStatus: 'refunded',
+                restoredItems: order.items.map((item) => ({
+                  productId: item.productId,
+                  productName: item.productName,
+                  quantity: item.quantity,
+                })),
+              },
+            },
+          },
+        },
+        include: {
+          items: true,
+          payment: true,
+          histories: true,
+        },
+      });
+    });
+
+    return res.json({
+      success: true,
+      data: refundedOrder,
+    });
+  } catch (error) {
+    console.error('관리자 주문 환불 처리 실패:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: '주문 환불 처리 실패',
     });
   }
 });
