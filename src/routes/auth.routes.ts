@@ -603,6 +603,7 @@ router.get('/kakao/callback', async (req: Request, res: Response) => {
     const { code } = req.query;
 
     const clientId = process.env.KAKAO_CLIENT_ID;
+    const clientSecret = process.env.KAKAO_CLIENT_SECRET;
     const callbackUrl = process.env.KAKAO_CALLBACK_URL;
     const jwtSecret = process.env.JWT_SECRET;
     const clientUrl = process.env.CLIENT_URL;
@@ -614,7 +615,7 @@ router.get('/kakao/callback', async (req: Request, res: Response) => {
       });
     }
 
-    if (!clientId || !callbackUrl || !jwtSecret || !clientUrl) {
+    if (!clientId || !clientSecret || !callbackUrl || !jwtSecret || !clientUrl) {
       return res.status(500).json({
         success: false,
         message: '카카오 로그인 설정이 없습니다.',
@@ -630,6 +631,7 @@ router.get('/kakao/callback', async (req: Request, res: Response) => {
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         client_id: clientId,
+        client_secret: clientSecret,
         redirect_uri: callbackUrl,
         code,
       }),
@@ -638,6 +640,8 @@ router.get('/kakao/callback', async (req: Request, res: Response) => {
     const tokenData = await tokenResponse.json();
 
     if (!tokenResponse.ok || !tokenData.access_token) {
+      console.error('카카오 토큰 발급 실패:', tokenData);
+
       return res.status(400).json({
         success: false,
         message: '카카오 토큰 발급에 실패했습니다.',
